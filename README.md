@@ -1,6 +1,6 @@
 # Papers-Notes
 ## Notes List
-- [SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis](#SyRust:-Automatic-Testing-of-Rust-Libraries-with-Semantic-Aware-Program-Synthesis)
+- [SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis](#syrust:-automatic-testing-of-rust-libraries-with-semantic-aware-program-synthesis)
 
 
 --- 
