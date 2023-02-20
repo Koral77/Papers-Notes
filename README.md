@@ -1,11 +1,11 @@
 # Papers-Notes
 ## Notes List
-- [SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis](#SyRust)
+- [SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis](#SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis)
 
 
 --- 
 
-## <span id="SyRust">SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis</span>
+## SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis
 **The issues to be solved**
 1. **Basic Typing and Subtyping Constraints** Rust is statically typed: all variables are assigned a type at compile time and all uses of variables are consistent with their types. An type should be matched with its reference and an immutable reference should be matched with mutable reference, but not the other way around.
 2. **Polymorphism and API Specification Refinement** To generates test cases for APIs with polymorphic types, the algorithm needs to know how the type variable T is instantiated and handle subsequent typing constraints(traits). Defining a notion of API refinement: a type signature that permits fewer inputs is considered more refined. For example, Vec\<String> is more refined than Vec\<T>, as the former permits only vectors of strings and the latter permits more types.
