@@ -20,8 +20,8 @@ Nine rules are used to solve the issues above.
 > - Rule 1 states that the available variables and types at the start of the synthesis are the ones in the template T.
 > - Rule 2 describes if x is defined in line i, then the type of x in line i + 1 is same as in line i and the types of variables belonging to the intersection of the domains of context(i) and context(i + 1) remain unchanged.
 > - Rule 3 defines type checking for a multi-line program. 
->> 1. Single-Line Type Check Definition: Let f: t1 × ... × tk → t' and line i contain a call to f(v1, ..., vk), line i containing f types checks if it satisfies the conditions that v1, ..., vk ∈ dom context(i) and types of all variables in dom context(i) ⊑ all types from the template and API signature and a polymorphic match is compatible for every pair of polymorphic variables. 
->> 2. Multi-Line program Type Check Definition:  Every single line of code in the program satifies the conditions in Single-Line Type Check Definition.
+> - - 1. Single-Line Type Check Definition: Let f: t1 × ... × tk → t' and line i contain a call to f(v1, ..., vk), line i containing f types checks if it satisfies the conditions that v1, ..., vk ∈ dom context(i) and types of all variables in dom context(i) ⊑ all types from the template and API signature and a polymorphic match is compatible for every pair of polymorphic variables. 
+> - - 2. Multi-Line program Type Check Definition:  Every single line of code in the program satifies the conditions in Single-Line Type Check Definition.
 2. **Ownership and Variable Lifetime**
 > - Rule 4 makes sure that the types must be a primitive type or static referece (&) if the variables are the same.
 > - Rule 5  used to terminate non-primitive variable lifetimes upon use.
