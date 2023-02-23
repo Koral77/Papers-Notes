@@ -53,4 +53,5 @@ After
 duplicating the API, we add a constraint to the original API to prevent it from being used with the same combination of input types.
 
 **API Selection Strategy**
+
 We allow few APIs to be manually selected to simulate the scenarios where the programmers want to test specific APIs. Then the rest of the APIs are chosen through weighted random selection. The weights depend on whether the API contains unsafe code or not. APIs that contain unsafe code are given 50% more weight than APIs that are completely free of unsafe code. To this set, we add default APIs that represent operations built into Rust: for assignment to mutable (let mut x = y) and two kinds of borrowing (&, &mut).
