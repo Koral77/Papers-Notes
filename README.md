@@ -51,3 +51,6 @@ function and fully concretize the duplicated API’s inputs with the current inp
 If the test case fails to compile, what happens next depends on what error we get. If the error is originating from the inputs to the API, then we perform the same refinement as in the previous section. Other errors are fjxed directly. For example, if we get the message "expected String, got Vec\<i32>", we duplicate the API, concretize the inputs, and set the output type to Vec\<i32>.\
 After
 duplicating the API, we add a constraint to the original API to prevent it from being used with the same combination of input types.
+
+**API Selection Strategy**
+We allow few APIs to be manually selected to simulate the scenarios where the programmers want to test specific APIs. Then the rest of the APIs are chosen through weighted random selection. The weights depend on whether the API contains unsafe code or not. APIs that contain unsafe code are given 50% more weight than APIs that are completely free of unsafe code. To this set, we add default APIs that represent operations built into Rust: for assignment to mutable (let mut x = y) and two kinds of borrowing (&, &mut).
