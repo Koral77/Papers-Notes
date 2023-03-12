@@ -1,7 +1,12 @@
 # Papers-Notes
 # Notes List
+### Testing and Fuzzing
 - [SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis](#syrust-automatic-testing-of-rust-libraries-with-semantic-aware-program-synthesis)
+- [Search-Based Test Suite Generation for Rust](#search-based-test-suite-generation-for-rust)
+### Static Analysis
 - [Understanding Memory and Thread Safety Practices and Issues in Real-World Rust Programs](#understanding-memory-and-thread-safety-practices-and-issues-in-real-world-rust-programs)
+- [Detecting Unsafe Raw Pointer Dereferencing Behavior in Rust](#detecting-unsafe-raw-pointer-dereferencing-behavior-in-rust)
+- [RUDRA: Finding Memory Safety Bugs in Rust at the Ecosystem Scale](#rudra-finding-memory-safety-bugs-in-rust-at-the-ecosystem-scale)
 
 
 --- 
@@ -61,10 +66,40 @@ We allow few APIs to be manually selected to simulate the scenarios where the pr
 
 ---
 
+
+# Search-Based Test Suite Generation for Rust
+## Encoding
+Each statement $s_i$ in a test case is a value $v(s_i)$, which has a type $\tau(v(s_i))\in T$, where $T$ is the finite set of types. There can be six different types of statements:
+1. **Primitive statements** represents numeric variables, e.g., *let v = 42*. The primitive variable defines the value and type of the statement.
+2. **Struct initializations** generate instances of a given struct, e.g., *let b = Book {name: "The Hobbit"}*. The object constructed in the statement defines the value and statement’s type. A struct instantiation can have parameters whose values are assigned out of the set {$v(s_k) | 0 \leq k < i$}.
+3. **Enum initializations** generate instances of a given enum, e.g., let opt: Option<i32> = None;. The enum instance defines the value and
+statement’s type. An enum instantiation can have parameters whose values are assigned out of the set {$v(s_k) | 0 \leq k < i$}.
+4. **Field statements** access member variables of objects, e.g., *let b = a.x*. The member variable defines the value and the field’s statement type. The source of the member variable, i.e., *a*, must be part of the set {$v(s_k) | 0 \leq k < i$}.
+5. **Associative function statements** invoke associative functions of datatypes, e.g., *let b = a.len()*. The owner of the function (if non-static) and all of the parameters must be values in {$v(s_k) | 0 \leq k < i$}. The return value determines the statement’s value and type.
+6. **Function statements**  invoke loose functions, i.e., functions that are not associated with any datatype, for instance, *let a = foo()*. The parameters of the function must be values in {$v(s_k) | 0 \leq k < i$}. The return value determines the statement’s value and type.
+
+## Implementation
+### Three Intermediate Steps
+1. First, the tool requires information about which data types the Crate has and which functions the data types provide. It performs analysis at the High-level Intermediate Representation (HIR) level. The HIR analysis yields a collection of Generators. These provide an overview of which data types can be instantiated in a test case.
+2. To evaluate the Generated Tests in terms of their coverage, RustyUnit instruments the Mid-level Intermediate Representation (MIR) and compiles the crate yielding an Instrumented Binary. MIR is a CFG. The tool injects instructions into the MIR to trace the execution of individual basic blocks and branches. If a generated test executes a code location in the crate, the event is stored in the Execution Traces. If an executed basic block is an entry point of a branch, RustyUnit computes how the values, which the conditional depends on, need to be changed to hit other branches in that context, i.e., branch distance (BD). The BD is 0 for all basic blocks that a test case executes. 
+3. The collected BDs in the execution traces are only one part. To calculate the overall fitness value with respect to each coverage target, RustyUnit must additionally determine the approach level (AL) from the corresponding Control Dependence Graphs (CDGs). AL describes how far a test case was from a target in the corresponding CDG when the test case deviated from the course, i.e., the number of missed control dependencies between the target and the point where the test case took a wrong turn.   
+RustyUnit calculates the overall fitness value of a test *t* with respect to target *m* as follows and normalizes Branch distance with function $\alpha$. The goal is to push the fitness value *F* of a test case with respect to a coverage target to zero to cover the target.
+$$F_m(t) = Approach Level + \alpha(Branch Distance)$$
+$$\alpha(x)=\frac x{x+1}$$
+
+### Handling Generics and Traits
+1. If RustyUnit generates a statement whose return value is to be used as a parameter for another statement, the tool replaces the generic type parameters of the return type by concrete ones, while any other generic types are chosen at random; for instance, to generate an argument of type *Option\<i32>*, RustyUnit could invoke *foo* with type parameter A being *i32*.Since B is not constrained by the concrete return type and any trait bounds, the type is free to choose. In general, RUSTYUNIT mainly uses primitive data types for a SUT to keep the generated tests simple as fa as this satifies the defined trait bounds.
+```
+1   impl<A, B> for FoorBar<A, B> {
+2       fn foo(&self, x: B, v: &Vec<A>) -> Option<A> {/*...*/} 
+3   }
+```
+2. Otherwise, all generic type parameters of the corresponding statement are selected randomly.
+
+---
+
 ## Understanding Memory and Thread Safety Practices and Issues in Real-World Rust Programs
-
 ## Insights
-
 1. (Reasons of Using unsafe) Most unsafe usages are for good or unavoidable reasons, indicating that Rust’s rule checks are sometimes too strict and that it is useful to provide an alternative way to escape these checks.
 2. (Unsafe Removal) Interior unsafe is a good way to encapsulate unsafe code.
 3. (Encapsulating Interior Unsafe) Some safety conditions of unsafe code are diffjcult to check. Interior unsafe functions often rely on the preparation of correct inputs and/or execution environments for their internal unsafe code to be safe.
@@ -78,7 +113,6 @@ We allow few APIs to be manually selected to simulate the scenarios where the pr
 11. (Fixes of Non-Blocking Bugs) Fixing strategies of Rust non-blocking (and blocking) bugs are similar to traditional languages. Existing automated bug fixing techniques are likely to work on Rust too.
 
 ## Suggestions
-
 1. (Reasons of Using unsafe) Programmers should try to find the source of unsafety and only export that piece of code as an unsafe interface to minimize unsafe interfaces and to reduce code inspection efforts.
 2. (Unsafe Removal) Rust developers should first try to properly encapsulate unsafe code in interior unsafe functions before exposing them as unsafe.
 3. (Encapsulating Interior Unsafe) If a function’s safety depends on how it is used, then it is better marked as unsafe not interior unsafe.
@@ -90,7 +124,6 @@ We allow few APIs to be manually selected to simulate the scenarios where the pr
 
 
 ## Reasons of Usage
-
 1. Most of them (66%) are for (unsafe) **memory operations**, such as *raw pointer manipulation* and *type casting*. In Rust std, the heaviest unsafe usages appear in the sys module, likely because it interacts more with low-level systems.
 2. Further analyze the purposes of our studied 600 unsafe usages. The most common purpose of the unsafe usages is to **reuse existing code** (42%), for example, to convert a C-style array to Rust’s variable-size array (called slice), to call functions from external libraries like glibc. Another common purpose of using unsafe code is to **improve performance** (22%). The remaining unsafe usages include bypassing Rust’s safety rules to **share data across threads** (14%) and other types of Rust compiler check bypassing.
 3. Sometimes removing unsafe will not cause any compile errors (32 or 5% of the studied unsafe usages). For 21 of them, programmers mark a function as unsafe for **code consistency** (e.g., the same function for a different platform is unsafe). For the rest, programmers use unsafe to give a **warning of possible dangers** in using this function.
@@ -109,7 +142,6 @@ We allow few APIs to be manually selected to simulate the scenarios where the pr
 ```
 
 ## Memory Safety Issues
-
 ### **Bug categories**
 1. *Buffer overflow* :   
 An error happens when computing buffer size or index in safe code and an out-of-boundary memory access happens later in unsafe code; \
@@ -158,7 +190,6 @@ t2 = ptr::read::<T>(&t1)
 ```
 
 ### **Fixing Strategies**
-
 1. *Conditionally skip code* :   
 Some bugs were fixed by capturing the conditions that lead to dangerous operations and skipping the dangerous operations under these conditions. For example, when the offset into a buffer is outside its boundary, buffer accesses are skipped.
 2. *Adjust lifetime* :   
@@ -168,7 +199,6 @@ Some bugs were fixed by modifying operands of unsafe operations, such as providi
 4. *Other* 
 
 ## Thread Safety Issues
-
 ### **Blocking Bugs (dead lock)**
 55 out of 59 blocking bugs are caused by operations of synchronization primitives, like *Mutex* and *Condvar*. All these synchronization operations have safe APIs, but their implementation heavily uses interior-unsafe code, since they are primarily implemented by reusing existing libraries like pthread. The other four bugs are not caused by primitives’ operations.
 1. *Mutex and RwLock* :   
@@ -180,14 +210,15 @@ Rust developers need to have a good understanding of the lifetime of a variable 
 2       // client: Arc<RwLock<Inner>>
 3  -    match connect(client.read().unwrap().m) {
 4  +    let result = connect(client.read().unwrap().m);
-5  +    match result {
-6           Ok(_) => {
-7               let mut inner = client.write().unwrap();
-8               inner.m = mbrs;   
-9           }
-10          Err(_) => {}
-11      };    
-12  }
+5  +        match result {
+6               Ok(_) => {
+7                   let mut inner = client.write().unwrap();
+8                   inner.m = mbrs;   
+9               }
+10              Err(_) => {}
+11          };
+12      }
+13  }
 ```
 2. *Condvar* :   
 In eight of the ten bugs related to Condvar, one thread is blocked at wait() of a Condvar, while no other threads invoke notify_one() or notify_all() of the same Condvar. In the other two bugs, one thread is waiting for a second thread to release a lock, while the second thread is waiting for the first to invoke notify_all().
@@ -229,3 +260,284 @@ MIR provides explicit ownership/lifetime information and rich type information. 
 Rust’s implicit lock release is the cause of several types of blocking bugs. An effective way to avoid these bugs is to visualize critical sections. The boundary of a critical section can be determined by analyzing the lifetime of the return of function lock(). Highlighting blocking operations such as lock() and channel-receive inside a critical section is also a good way to help programmers avoid blocking bugs.   
 2. **Static detectors**
 Lifetime and ownership information can be used to statically detect blocking bugs. By analyzing lock lifetime, a double lock detector was built. It first identifies all call sites of lock() and extracts two pieces of information from each call site: the lock being acquired and the variable being used to save the return value. As Rust implicitly releases the lock when the lifetime of this variable ends, our tool will record this release time. We then check whether or not the same lock is acquired before this time, and report a double-lock bug if so.
+
+
+---
+
+# Search-Based Test Suite Generation for Rust
+## Encoding
+Each statement $s_i$ in a test case is a value $v(s_i)$, which has a type $\tau(v(s_i))\in T$, where $T$ is the finite set of types. There can be six different types of statements:
+1. **Primitive statements** represents numeric variables, e.g., *let v = 42*. The primitive variable defines the value and type of the statement.
+2. **Struct initializations** generate instances of a given struct, e.g., *let b = Book {name: "The Hobbit"}*. The object constructed in the statement defines the value and statement’s type. A struct instantiation can have parameters whose values are assigned out of the set {$v(s_k) | 0 \leq k < i$}.
+3. **Enum initializations** generate instances of a given enum, e.g., let opt: Option<i32> = None;. The enum instance defines the value and
+statement’s type. An enum instantiation can have parameters whose values are assigned out of the set {$v(s_k) | 0 \leq k < i$}.
+4. **Field statements** access member variables of objects, e.g., *let b = a.x*. The member variable defines the value and the field’s statement type. The source of the member variable, i.e., *a*, must be part of the set {$v(s_k) | 0 \leq k < i$}.
+5. **Associative function statements** invoke associative functions of datatypes, e.g., *let b = a.len()*. The owner of the function (if non-static) and all of the parameters must be values in {$v(s_k) | 0 \leq k < i$}. The return value determines the statement’s value and type.
+6. **Function statements**  invoke loose functions, i.e., functions that are not associated with any datatype, for instance, *let a = foo()*. The parameters of the function must be values in {$v(s_k) | 0 \leq k < i$}. The return value determines the statement’s value and type.
+
+## Implementation
+### Three Intermediate Steps
+1. First, the tool requires information about which data types the Crate has and which functions the data types provide. It performs analysis at the High-level Intermediate Representation (HIR) level. The HIR analysis yields a collection of Generators. These provide an overview of which data types can be instantiated in a test case.
+2. To evaluate the Generated Tests in terms of their coverage, RustyUnit instruments the Mid-level Intermediate Representation (MIR) and compiles the crate yielding an Instrumented Binary. MIR is a CFG. The tool injects instructions into the MIR to trace the execution of individual basic blocks and branches. If a generated test executes a code location in the crate, the event is stored in the Execution Traces. If an executed basic block is an entry point of a branch, RustyUnit computes how the values, which the conditional depends on, need to be changed to hit other branches in that context, i.e., branch distance (BD). The BD is 0 for all basic blocks that a test case executes. 
+3. The collected BDs in the execution traces are only one part. To calculate the overall fitness value with respect to each coverage target, RustyUnit must additionally determine the approach level (AL) from the corresponding Control Dependence Graphs (CDGs). AL describes how far a test case was from a target in the corresponding CDG when the test case deviated from the course, i.e., the number of missed control dependencies between the target and the point where the test case took a wrong turn.   
+RustyUnit calculates the overall fitness value of a test *t* with respect to target *m* as follows and normalizes Branch distance with function $\alpha$. The goal is to push the fitness value *F* of a test case with respect to a coverage target to zero to cover the target.
+$$F_m(t) = Approach Level + \alpha(Branch Distance)$$
+$$\alpha(x)=\frac x{x+1}$$
+
+### Handling Generics and Traits
+1. If RustyUnit generates a statement whose return value is to be used as a parameter for another statement, the tool replaces the generic type parameters of the return type by concrete ones, while any other generic types are chosen at random; for instance, to generate an argument of type *Option\<i32>*, RustyUnit could invoke *foo* with type parameter A being *i32*.Since B is not constrained by the concrete return type and any trait bounds, the type is free to choose. In general, RUSTYUNIT mainly uses primitive data types for a SUT to keep the generated tests simple as fa as this satifies the defined trait bounds.
+```
+1   impl<A, B> for FoorBar<A, B> {
+2       fn foo(&self, x: B, v: &Vec<A>) -> Option<A> {/*...*/} 
+3   }
+```
+2. Otherwise, all generic type parameters of the corresponding statement are selected randomly.
+
+---
+
+# Detecting Unsafe Raw Pointer Dereferencing Behavior in Rust
+## Threat Analysis
+```
+fn generate_mutable_reference<T>(v: &Vec<T>) -> &mut Vec<T> {
+    unsafe {
+        let p = v as *const Vec<T>;
+        let q = p as *mut Vec<T>;
+        &mut *q
+    }
+}
+
+fn exploit_multiple() {
+    let mut a = vec![1, 2, 3];
+    let c = generate_mutable_reference(&a);
+    let d = generate_mutable_reference(&a);
+} 
+
+fn unsafe_mutate_immutable() -> i32 {
+    let x: i32 = 10;
+    unsafe {
+        let p: *const i32 = &x;
+        let q: *mut i32 = p as *mut i32;
+        *q = 12;
+    }
+    if (x < 11)
+        return 0;
+    return x;
+}
+
+fn innocent_looking_fn(b: &Box<unsize>) {
+    unsafe {
+        let p: *const usize = &**b;
+        let q: Box<usize> = Box::from_raw(p as *mut usize);
+    }
+}
+
+fn exloit_innocent() {
+    let mut b = Box::new(22);
+    innocent_looking_fn(&b);
+    *b += 1;
+}
+```
+1. **Generating multiple mutable references.** In function *generate_mutable_reference*,  an immutable reference is passed into the function as an input argument, which is converted to an immutable raw pointer p in line 3, and p is cast to a mutable raw pointer q. In line 5, q is dereferenced and generates a mutable reference which acts as the return value. Compiler fails to detect the a is mutably referenced inside the function. Thus, in *exploit_multiple*, mutable references c and d will exist in the same scope, both of which can be used to modify the values of a.
+2. **Mutating immutable variables.** In function *unsafe_mutate_immutable*, an immutable variable *x* is declared in line 14, its reference is converted to a mutable raw pointer in line 16, 17. In line 18, the raw pointer is dereferenced and assigns a new value to *x*. When it comes to line 20, the value *x* is changed to 12, so the program will go to line 22 instead of the right path (line 21). A wrong value is returned, which would cause unpredicted results.
+3. **Accessing freed memory.** In function *innocent_looking_fn*, a new *Box\<unsize> q* is generated from a raw pointer using *Box::from_raw* function. *q*’s life ends at line 26, at the same time the value is freed. In the function *exploit_innocent*, the compiler assumes *b* is borrowed and it is alive after the function call in line 30, so it will not prompt errors in line 31. In this way, the freed *b* is reused and can be exploited to reveal data.
+
+## Approach
+The hybrid approach contains two steps:   
+Employ pattern matching to identify thief functions that could generate
+multiple mutable references;
+Instrument the dereferencing operation
+1. **Pattern-Based Static Detection**   
+Functions containing mutable references as return value could be used to generate mutable references if they are called multiple times with same parameters. The pattern to model the functions is made up of the following conditions:   
+(1) The return value of the function is a mutable reference or data containing mutable references as member fields.   
+(2) The input arguments of the function contain no mutable references.   
+(3) The function is not declared with *unsafe*.
+2. **Instrumentation-Based Dynamic Detection**   
+A tag field is employed to store the status of the value.   
+(1) **Annotating the value**   
+Change the structure of value.   
+primitive type => struct shadowPrimitiveType {T: primitive type, tag: TAG}   
+struct S {..} => struct S {.., tag: TAG}   
+(2) **Updating tags**   
+tag = {"readonly", "writable", "dropped"}   
+immutable type => tag = "readonly"   
+mutable type => tag = "writable"   
+freed type => tag = "dropped"   
+(3) **Instrumenting dereferencing operations**   
+Instrument additional codes to check if that variable is in the right status according to the following rules:   
+&emsp; &emsp; a. Accessing variable is valid unless the tag is dropped.   
+&emsp; &emsp; b. Asigning values is invalid if the tag is dropped or readonly.
+```
+fn foo(i: i32, ..) { => fn fooShadow(i: Shadowi32, ..) {
+    let j = i + i;          let j = i.data + 1;
+    ...                     ...
+}                       }
+
+fn bar() {           => fn bar() {
+    let i = 0;              let i = Shadowi32{data: 0, tag: TAG};
+    foo(i, ..)              fooShadow(i, ..)
+}                       }
+
+struct Shadowi32 {
+    data: i32,
+    tag: TAG,
+}
+```
+3. Implementation   
+a. **finder** : Transverses the Abstract Syntax Tree (AST) to find thief functions matching the pattern.   
+b. **fencer** : Applies instrumentation to AST. At every dereferencing site, it inserts codes to perform the validity checking. During execution, the inserted code will execute before dereferencing occurs. It will throw errors if unsafe behavior is detected.
+
+---
+
+# RUDRA: Finding Memory Safety Bugs in Rust at the Ecosystem Scale
+## Defining Memory Safety Bugs in Rust
+- **Definition 1** : A type and a value are defined in a conventional manner. A type is considered as a set of values.
+- **Definition 2** : For a type *T*, safe-value(*T*) is defined as values that can be safely created. For instance, Rust’s string is internally represented as a byte array, but it can only contain UTF-8 encoded values when created via safe APIs.
+- **Definition 3** : A function *F* takes a value of type *arg*(*F*) and returns a value of type *ret*(*F*). We consider a function that takes multiple arguments as if it takes a tuple of values.
+- **Definition 4** : A function *F* has a memory safety bug if ∃*v* ∈ safe-value(*arg*(*F*)) such that calling *F*(*v*) triggers a memory safety violation or generates a return value $v_{ret}$ ∉ safe-value(*ret*(*F*)).
+- **Example 4** :  Consider a function that overwrites the length field of a Vec with usize::MAX. This does not cause an immediate memory safety violation, since it is just an integer field write. However, it will break other safe code and should be considered a bug. Hence, a function that generates a non-safe-value is also considered to have a memory safety bug. In this example, a vector with an incorrect length (i.e., usize::MAX) is a value but not a safe-value of Vec.
+- **Definition 5** : For a generic function Λ, pred(Λ) is defined as a set of types that satisfies the type predicate of Λ. Given a type *T* ∈ pred(Λ), resolve(Λ, *T*) instantiates a generic function Λ to a concrete function *F*.
+- **Definition 6** : A generic function Λ has a memory safety bug if it can be instantiated to a function that has a memory safety bug, i.e., ∃*T* ∈ pred(Λ) such that *F* = resolve(Λ, *T*) has a memory safety bug.
+- **Example 6** : Consider a function that accepts a single argument of generic type T and drops it (i.e., calls its destructor) twice. This function does not cause a memory safety bug with integer types because dropping an integer is no-op. However, calling this function with allocating types (e.g., Vec) leads to a security-critical double-free bug. Thus, this generic function is considered to have a memory safety bug because it has an instantiation that causes a memory
+safety bug. The correctness of a generic function depends on its type predicate. The function would not have a memory safety bug if it specified a type predicate T: Copy, since Copy types cannot have a destructor (all integer types are Copy).
+```
+fn double_drop<T>(mut val: T) {
+    unsafe { ptr::drop_in_place(&mut val); }
+    drop(val);
+}
+
+double_drop(123); // no memory-safety violation when `T=u32`
+double_drop(vec![1, 2, 3];) // double-free when `T=Vec<u32>`
+```
+- The Rust compiler automatically implements Send and Sync for simple user-defined types. However, types that interact with unsafe code often require manual implementations of Send and Sync.
+- **Definition 7** :  An ownership of a type that implements the Send trait can be sent to another thread. A Send implementation has a memory safety bug if it is implemented on a type whose ownership cannot be transferred to another thread.
+- **Definition 8** : A type that implements the Sync trait can be accessed concurrently from different threads through shared references. A Sync implementation has a memory safety bug if it is implemented on a type that defines a non-thread-safe method that takes a shared self reference, &self.
+- **Example 8** : The basic reference-counted smart pointer Rc\<T> is neither Send nor Sync because it can be cloned through a shared reference, which modifies its counter in a non-thread-safe way. On the other hand, the atomic version Arc\<T> is Send and Sync if the inner type T is Send and Sync.
+
+## Pitfalls of Unsafe Rust
+### Panic Safety
+When a panic happens, Rust unwinds the active call stack, releases resources held by the current thread by invoking the destructors of the variables, and transfers the control flow to the panic handler.    
+Its interaction with unsafe code is error-prone and often causes non-trivial memory safety bugs. It is common for encapsulated unsafe code to temporarily create a lifetimebypassed object that bypasses Rust’s ownership system (e.g., extending object lifetime, creating uninitialized variables) and fix up the introduced inconsistency later. If a panic happens in between the bypass and its fix-up, the destructors of the variable will run without realizing that the variable is in an inconsistent state, resulting in memory safety issues.   
+
+- **Definition 9** : A function *F* has a panic safety bug if it drops a value *v* of type *T* such that *v* ∉ safe-value(*T*) during unwinding and causes a memory safety violation.
+- **Bug example** : There is a panic bug in String::retain(). It filters characters in a string with a caller-provided closure but can leave the string as non-UTF-8 encoded when f() panics ( _ => panic!() ). The standard library assumes that all strings are UTF-8 encoded, and using the nonconforming string can lead to memory safety violations. This was fixed by overwriting the length of the string to zero before running the loop (the first +) and restoring it later (the second +), so that the string is left empty if f() panics.
+```
+pub fn retain<F>(&mut self, mut f: F) where F: FnMut(char) -> bool {
+    let len = self.len();
+    let mut del_bytes = 0;
+    let mut idx = 0;
+
++   unsafe { self.vec.set_len(0); }
+    while idx < len {
+        let ch = unsafe {
+            self.get_unchecked(idx..len).chars().next.unwrap()
+        };
+        let ch_len = ch.len_utf8();
+
+        // self is left in an inconsistent state if f() panics
+*       if !f(ch) {
+            del_bytes += ch_len;
+        }else if del_bytes > 0 {
+            unsafe {
+                ptr::copy(self.vec.as_ptr().add(idx),
+                    self.vec.as_mut_ptr().add(idx - del_bytes),
+                    ch_len);
+            }
+        }
+        idx += ch_len; // point idx to the next char
+    }
++   unsafe { self.vec.set_len(llen - del_bytes); }
+}
+
+// PoC: creates a non-utf-8 string in the unwinding path
+// 中间的e是e上面加一点，这里打不出来所以用e表示
+"0e0".to_string().retain(|_| {
+    match the_number_of_invocation() {
+        1 => false,
+        2 => true,
+        _ => panic!(),
+    }
+});
+```
+
+### Higher-order Safety Invariant
+- The main point of the safety invariant :   
+The safety invariant ensures that safe code, no matter what it does, executes safely – it cannot cause undefined behavior when working on this data. For example, when you write a function fn foo(x: bool), you can assume that x is safe for bool: It is either true or false. This means that every safe operation on bool (in particular, case distinction) can be performed without running into undefined behavior. More detail in  https://www.ralfj.de/blog/2018/08/22/two-kinds-of-invariants.html.
+- For the safety of higher-order types, common mistakes are made with incorrect assumptions of (1) logical consistency (e.g., respects total ordering), (2) purity (e.g., always returns the same value for the same input), (3) and semantic restrictions (e.g., only writes to the argument because it may contain uninitialized bytes) on a caller-provided function.
+- It is fairly difficult and errorprone to enforce a higher-order invariant under Rust’s type system. One notable example is passing an uninitialized buffer to a caller-provided Read implementation. Read is commonly expected to read data from one source (e.g., a file) and write into the provided buffer. However, it is perfectly valid to read the buffer under Rust’s type system. This leads to undefined behavior if the buffer contains uninitialized memory. Unfortunately, many Rust programmers provide an uninitialized buffer to a caller-provided function as performance optimization without realizing the inherent unsoundness.
+- **Definition 10** : A higher-order invariant bug is a memory safety bug in a generic function that is caused by incorrectly assuming a higher-order invariant that is not guaranteed by the type system. A generic function Λ with a higher-order invariant bug incorrectly assumes certain properties (e.g., purity) on its higher-order type parameter (e.g., closure) although pred(Λ) does not guarantee it.
+- **Bug example** : More details in https://rust-coding-guidelines.github.io/rust-coding-guidelines-zh/safe-guides/coding_practice/unsafe_rust/safe_abstract/P.UNS.SAS.02.html. Return an uninitialized bytes means borrow() return "123456" for the first time and len is 6 and return "0" for the second time and len is 1 while capacity of result is 6, so result in the second time contains 5 uninitialized bytes.
+
+### Propagating Send/Sync in Generic Types
+Manual Send/Sync implementations are not only difficult to correctly implement, but also make code maintenance fragile. The Send and Sync rules become complex as the implementation bound becomes conditional when generic types are involved. Call this subtle relation between the Send/Sync of types in table below and the Send/Sync of the inner types the Send/Sync variance.   
+
+|      Type     |        Description       | +Send only if | +Sync only if |
+|:-------------:|:------------------------:|:-------------:|:-------------:|
+|     Vec\<T>    |     Owning container     |    T: Send    |    T: Sync    |
+|     &mut T    |    Exclusive reference   |    T: Send    |    T: Sync    |
+|       &T      |     Aliased reference    |    T: Sync    |    T: Sync    |
+|   RefCell\<T>  |    Internal mutability   |    T: Send    |       -       |
+|    Mutex\<T>   |        RAII mutex        |    T: Send    |    T: Send    |
+| MutexGuard\<T> |        Mutex guard       |       -       |    T: Sync    |
+|   RwLock\<T>   |        RAII rwlock       |    T: Send    |  T: Send+Sync |
+|     Rc\<T>     |     Reference counter    |       -       |       -       |
+|     Arc\<T>    | Atomic reference counter |  T: Send+Sync |  T: Send+Sync |
+
+- **Definition 11** : A generic type that takes a type parameter T has a Send/Sync variance (SV) bug if it specifies an incorrect bound on the inner type T when implementing Send/Sync.
+- **Bug example** : A MappedMutexGuard that dereferences to type U is created from a MutexGuard that dereferences to type T by applying a closure that converts &mut T to &mut U (line 13). MappedMutexGuard’s Send and Sync have a trait bound only to the type parameter T but not for the type parameter U (line 20 and 23). This definition turns out to be unsafe because it allows sharing a reference of a MappedMutexGuard even when the closure’s return type U is not thread-safe. The bug was fixed by adding a proper bound to the type parameter U (line 21 and 24). 
+```
+pub struct MappedMutexGuard<'a, T: ?Sized, U: ?Sized> {
+    mutex: &'a Mutex<T>,
+    value: *mut U,
++   _marker: PhantomData<&'a mut U>,
+}
+
+impl<'a, T: ?Sized> MutexGuard<'a, T> {
+    pub fn map<U: ?Sized, F>(this: Self, f: F) -> MappedMutexGuard<'a, T, U>
+     where F: FnOnce(&mut T) -> &mut U {
+        let mutex = this.mutex;
+        let value = f(unsafe { &mut *this.mutex.value.get() });
+        mem::forget(this);
+-       MappedMutexGuard { mutex, value }
++       MappedMutexGuard { mutex, value, _marker: PhantomData }
+    }
+}
+- unsafe impl<T: ?Sized + Send, U: ?Sized> Send
++ unsafe impl<T: ?Sized + Send, U: ?Sized + Send> Send
+      for MappedMutexGuard<'_, T, U> {}
+- unsafe impl<T: ?Sized + Sync, U: ?Sized> Sync
++ unsafe impl<T: ?Sized + Sync, U: ?Sized + Sync> Sync
+      for MappedMutexGuard<'_, T, U> {}
+
+// PoC: this safe Rust code allows race on reference counter
+* MutexGuard::map(guard, |_| Box::leak(Box::new(Rc::new(true))));
+```
+
+## Design
+### Three design goals
+- **Generic type awareness.** RUDRA should be able to reason about generic types without knowing the concrete forms of their type parameters. RUDRA implements algorithms by combining two internal IRs of the Rust compiler, namely, HIR and MIR.
+- **Scalability.** Rudra can adjust the balance between precision and execution time. RUDRA aims to be a push-button solution that requires no manual annotation and effort from the original package developers.
+- **Adjustable precision.** RUDRA provides an option to adjust the false positive rates based on the goal and the available time budget; RUDRA can be used for both scanning the package registry (fewer false positives) or as part of the development process (tolerant to more false positives).
+### Hybrid Analysis with HIR and MIR
+- It uses HIR to quickly collect interesting code regions （unsafe function or safe function that contains unsafe code） using structural information available in HIR.
+- RUDRA uses MIR to reason about code semantics. RUDRA implements a coarsegrained dataflow analysis on the control-flow graph provided as MIR expressions.
+### Algorithm: Unsafe Dataflow Checker (UD)
+- **Overview.** The unsafe dataflow checker examines the dataflows in functions that handle lifetime-bypassed values.It uses coarse-grained taint tracking to identify panic safety bugs and higher-order invariant bugs.   
+- Six classes of lifetime bypasses:   
+    - *uninitialized* : creating uninitialized values
+    - *duplicate* : duplicating the lifetime of objects (e.g., with mem::read())
+    - *write* : overwriting the memory of a value
+    - *copy* : memcpy()-like buffer copy
+    - *transmute* : reinterpreting a type and its lifetime
+    - *ptr-to-ref* : converting a pointer to a reference
+- The **key challenge** of the unsafe dataflow algorithm is to find program locations that might panic() or where higherorder safety invariants are implicitly assumed. RUDRA, at the MIR layer, uses an unresolvable generic function call as an approximation of a potential panic site or a location where higher-order invariants are implicitly assumed.
+- **Adjustable precision.** RUDRA only detects uninitialized values (e.g., Vec::set_len() to extend a Vec) in the high precision setting because a single function call leads to a lifetime bypass in such cases. In the medium precision setting, RUDRA additionally detects the lifetime bypass of values using read(), write(), and copy(). These bypasses are more difficult to reason about because they are often used with pointer arithmetic. Finally, RUDRA detects lifetime forging with transmute() or raw pointer casting in the low precision setting.
+### Algorithm: Send/Sync Variance Checker (SV)
+- **Overview.** The Send/Sync variance checker estimates the necessary minimum set of Send/Sync bounds for each Algebraic Data Type (ADT) (like Vec\<T>) based on the associated API signatures. If the ADT does not contain the necessary bounds, it reports that Send/Sync might be incorrectly implemented. One might be able to accurately model such usages by performing inter-procedural and flow-sensitive analysis to verify the thread safety at an arbitrary program point.
+- **Key idea.** Determining if an ADT requires Send, Sync, or both, based on a set of effective heuristics using the type definition and the associated API signatures:   
+Given an ADT with a generic parameter T,   
+    - **+Send.** If there exists an API that moves T (i.e., either taking as input the owned T or returning the owned T) but none of its APIs exposes &T (i.e., returning &T), then T:Send is the minimum necessary condition. For ADT:Sync, it is important to check the exposure of &T because it allows threads to concurrently access T. For ADT:Send, T:Send is the minimum necessary condition regardless of its API.
+    - **+Sync.** If there exists an API that exposes &T but none of its APIs move the owned T, then T:Sync is the minimum necessary condition for ADT:Sync.
+    - **+Send/+Sync.** If there exists an API that exposes &T and that moves the owned T, then T:Send+Sync is the minimum necessary condition for ADT:Sync.
+    - **None.** If there is no API that exposes &T or moves the owned T, it is not possible to verify the thread safety of the Send/Sync markers from the API signatures and it places no minimum necessary condition for ADT:Sync.
+- **Notice.** Note that these rules are not applied to generic parameters T placed within PhantomData—this is a zero-sized marker type that allows the binding of T to an ADT but does not actually own T. This helps us avoid several false positives where a generic parameter is used only as a type-level identifier.
+- **Adjustable precision.** In the high precision setting, RUDRA focuses on Send bounds which are less affected by custom synchronization than Sync bounds. It implements +Send analysis from the baseline algorithm to identify missing ADT: Sync, T: Send bound and analyzes the type structure to identify missing ADT: Send, T: Send bound. In the medium precision setting, RUDRA fully instruments the baseline algorithm while also reporting Sync impls with no Sync bounds on all of its generic parameters. In the low precision setting, RUDRA removes the PhantomData-filtering policy and reports Sync impls with no Sync bounds on any of its generic parameters.
