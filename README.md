@@ -2,11 +2,14 @@
 # Notes List
 ### Testing and Fuzzing
 - [SyRust: Automatic Testing of Rust Libraries with Semantic-Aware Program Synthesis](#syrust-automatic-testing-of-rust-libraries-with-semantic-aware-program-synthesis)
+- [RULF: Rust Library Fuzzing via API Dependency Graph Traversal](#rulf-rust-library-fuzzing-via-api-dependency-graph-traversal)
 - [Search-Based Test Suite Generation for Rust](#search-based-test-suite-generation-for-rust)
+- [RUSTY: A Fuzzing Tool for Rust](#rusty-a-fuzzing-tool-for-rust)
 ### Static Analysis
 - [Understanding Memory and Thread Safety Practices and Issues in Real-World Rust Programs](#understanding-memory-and-thread-safety-practices-and-issues-in-real-world-rust-programs)
 - [Detecting Unsafe Raw Pointer Dereferencing Behavior in Rust](#detecting-unsafe-raw-pointer-dereferencing-behavior-in-rust)
 - [RUDRA: Finding Memory Safety Bugs in Rust at the Ecosystem Scale](#rudra-finding-memory-safety-bugs-in-rust-at-the-ecosystem-scale)
+- [SafeDrop: Detecting Memory Deallocation Bugs of Rust Programs via Static Data-Flow Analysis](#safedrop-detecting-memory-deallocation-bugs-of-rust-programs-via-static-data-flow-analysis)
 
 
 --- 
@@ -63,6 +66,49 @@ duplicating the API, we add a constraint to the original API to prevent it from 
 
 We allow few APIs to be manually selected to simulate the scenarios where the programmers want to test specific APIs. Then the rest of the APIs are chosen through weighted random selection. The weights depend on whether the API contains unsafe code or not. APIs that contain unsafe code are given 50% more weight than APIs that are completely free of unsafe code. To this set, we add default APIs that represent operations built into Rust: for assignment to mutable (let mut x = y) and two kinds of borrowing (&, &mut).
 
+
+---
+
+# RULF: Rust Library Fuzzing via API Dependency Graph Traversal
+## Overview : 
+1. We compose fuzz targets based on the API dependency graph of a given library.
+2. We breadthfirst search (BFS) API sequences under a length threshold on the graph.
+3. For each uncovered API (deep-API) due to the length limitation, we backward search their dependent API sequences.
+4. Finally, we refine our set of sequences to obtain a minimum subset that covers the same set of APIs.
+## Four objectives: 
+- **Validty** : The synthesized fuzz targets should be able to be successfully compiled
+- **API coverage** : The set of generated fuzz targets should cover as many APIs as possible.
+- **Efficiency** : The set of generated fuzz targets should be efficient for fuzzing. 
+- **Effectiveness** : The generated targets should be friendly to fuzzing tools for bug hunting. In order to fuzz an API effectively, the generated program should be small.
+## Approach
+### API Dependency Graph
+- Define an API dependency graph as a directed graph :   
+$G = (FN_m, PAR_n, PE_p,CE_q)$   
+where   
+    - $FN_m$ is API nodes ;   
+    - $PAR_n$ is parameter nodes ;
+    - $PE_p$ is producer edges ⊆ $FN_m × PAR_n$, where an edge $fn_i→par_j$ implies $fn_i$ returns a value of type $par_j$ ;   
+    - $CE_q$ is consumer edges ⊆ $PAR_n × FN_m$, where an edge $par_i→fn_j$ implies $par_i$ is a non-primitive parameter for $fn_j$. The weight of the edge means the number of $par_i$.   
+### Validity of API Sequence
+- **Reachable** : An API node is reachable if and only if it is a start node or all its required parameter nodes are reachable and the weights of consumer edges are satisfied. Similarly, a parameter node is reachable if at least one API node that can produce the parameter is reachable.
+- **Validity** : An API sequence $fn_0, ..., fn_k$ is valid if $fn_0$ is a start node and each $fn_i (0 < i < k)$  is reachable given the subsequences of $fn_0, ..., fn_{i-1}$.
+### API Sequence Generation
+1. *BFS with Pruning*   
+2. *Backward search*
+3. *Merge and Refine* : prefer a candidate sequence A over B based on the following rules.   
+    - A covers more new nodes than B.
+    - A and B cover the same number of new nodes, but A covers more new edges than B.
+    - A and B cover the same number of new nodes and edges, but A is shorter than B.
+## Implementation
+### Construct API Dependency Graph
+1. Extract all public API signatures from the source code through rustdoc.
+2. After we extract all public API signatures, we infer dependencies among APIs based on type inference to build dependency graph.
+### Generate API Sequences
+- If the API can mutate the value of a variable (get &mut as input), it is not appropriate that we treat this API as an end node.
+- If a value is moved, we add a tag to the variable which owns the value and do not use this variable in the following statements. 
+- We select some combinations of variable types and call types that we think are commonly used in API calls and mark these combinations as copying cases if they do be.
+- Except for several cases marked as copying cases, we assume that all other cases are moving cases.
+### Synthesize Program
 
 ---
 
@@ -295,6 +341,14 @@ $$\alpha(x)=\frac x{x+1}$$
 
 ---
 
+# RUSTY: A Fuzzing Tool for Rust
+## Fuzzing Approach
+1. Generating arbitrary inputs through Fuzzing tool.
+2. Performing property-baes tesing, if a failure is found, RUSTY automatically finds the minimal test case to reproduce it.
+3. RUSTY leverages a **concolic** execution engine to produce concrete exploit values for dicovered bugs.
+
+---
+
 # Detecting Unsafe Raw Pointer Dereferencing Behavior in Rust
 ## Threat Analysis
 ```
@@ -395,7 +449,7 @@ b. **fencer** : Applies instrumentation to AST. At every dereferencing site, it 
 - **Definition 3** : A function *F* takes a value of type *arg*(*F*) and returns a value of type *ret*(*F*). We consider a function that takes multiple arguments as if it takes a tuple of values.
 - **Definition 4** : A function *F* has a memory safety bug if ∃*v* ∈ safe-value(*arg*(*F*)) such that calling *F*(*v*) triggers a memory safety violation or generates a return value $v_{ret}$ ∉ safe-value(*ret*(*F*)).
 - **Example 4** :  Consider a function that overwrites the length field of a Vec with usize::MAX. This does not cause an immediate memory safety violation, since it is just an integer field write. However, it will break other safe code and should be considered a bug. Hence, a function that generates a non-safe-value is also considered to have a memory safety bug. In this example, a vector with an incorrect length (i.e., usize::MAX) is a value but not a safe-value of Vec.
-- **Definition 5** : For a generic function Λ, pred(Λ) is defined as a set of types that satisfies the type predicate of Λ. Given a type *T* ∈ pred(Λ), resolve(Λ, *T*) instantiates a generic function Λ to a concrete function *F*.
+- **Definition 5** : For a generic function Λ, pred(Λ) is defined as a set of types that satisfies the type predicate of Λ. Given a type *T* ∈ pred(Λ), resolve(Λ, *T*) instantiates a generic function Λ to a concrete function *F*. Note: type predicate means Trait and Lifetime Bound.
 - **Definition 6** : A generic function Λ has a memory safety bug if it can be instantiated to a function that has a memory safety bug, i.e., ∃*T* ∈ pred(Λ) such that *F* = resolve(Λ, *T*) has a memory safety bug.
 - **Example 6** : Consider a function that accepts a single argument of generic type T and drops it (i.e., calls its destructor) twice. This function does not cause a memory safety bug with integer types because dropping an integer is no-op. However, calling this function with allocating types (e.g., Vec) leads to a security-critical double-free bug. Thus, this generic function is considered to have a memory safety bug because it has an instantiation that causes a memory
 safety bug. The correctness of a generic function depends on its type predicate. The function would not have a memory safety bug if it specified a type predicate T: Copy, since Copy types cannot have a destructor (all integer types are Copy).
@@ -460,8 +514,9 @@ pub fn retain<F>(&mut self, mut f: F) where F: FnMut(char) -> bool {
 ```
 
 ### Higher-order Safety Invariant
+- **A Rust function should execute safely for all safe inputs**
 - The main point of the safety invariant :   
-The safety invariant ensures that safe code, no matter what it does, executes safely – it cannot cause undefined behavior when working on this data. For example, when you write a function fn foo(x: bool), you can assume that x is safe for bool: It is either true or false. This means that every safe operation on bool (in particular, case distinction) can be performed without running into undefined behavior. More detail in  https://www.ralfj.de/blog/2018/08/22/two-kinds-of-invariants.html.
+The safety invariant ensures that safe code, no matter what it does, executes safely – it cannot cause undefined behavior when working on this data. For example, when you write a function fn foo(x: bool), you can assume that x is safe for bool: It is either true or false. This means that every safe operation on bool (in particular, case distinction) can be performed without running into undefined behavior. More detail in  https://www.ralfj.de/blog/2018/08/22/two-kinds-of-invariants.html and https://www.hillelwayne.com/post/safety-and-liveness#:~:text=These%20are%20all%20safety%20properties%20called%20invariants.%20Invariants,is%20violated.%20Not%20all%20safety%20properties%20are%20invariants.
 - For the safety of higher-order types, common mistakes are made with incorrect assumptions of (1) logical consistency (e.g., respects total ordering), (2) purity (e.g., always returns the same value for the same input), (3) and semantic restrictions (e.g., only writes to the argument because it may contain uninitialized bytes) on a caller-provided function.
 - It is fairly difficult and errorprone to enforce a higher-order invariant under Rust’s type system. One notable example is passing an uninitialized buffer to a caller-provided Read implementation. Read is commonly expected to read data from one source (e.g., a file) and write into the provided buffer. However, it is perfectly valid to read the buffer under Rust’s type system. This leads to undefined behavior if the buffer contains uninitialized memory. Unfortunately, many Rust programmers provide an uninitialized buffer to a caller-provided function as performance optimization without realizing the inherent unsoundness.
 - **Definition 10** : A higher-order invariant bug is a memory safety bug in a generic function that is caused by incorrectly assuming a higher-order invariant that is not guaranteed by the type system. A generic function Λ with a higher-order invariant bug incorrectly assumes certain properties (e.g., purity) on its higher-order type parameter (e.g., closure) although pred(Λ) does not guarantee it.
@@ -541,3 +596,51 @@ Given an ADT with a generic parameter T,
     - **None.** If there is no API that exposes &T or moves the owned T, it is not possible to verify the thread safety of the Send/Sync markers from the API signatures and it places no minimum necessary condition for ADT:Sync.
 - **Notice.** Note that these rules are not applied to generic parameters T placed within PhantomData—this is a zero-sized marker type that allows the binding of T to an ADT but does not actually own T. This helps us avoid several false positives where a generic parameter is used only as a type-level identifier.
 - **Adjustable precision.** In the high precision setting, RUDRA focuses on Send bounds which are less affected by custom synchronization than Sync bounds. It implements +Send analysis from the baseline algorithm to identify missing ADT: Sync, T: Send bound and analyzes the type structure to identify missing ADT: Send, T: Send bound. In the medium precision setting, RUDRA fully instruments the baseline algorithm while also reporting Sync impls with no Sync bounds on all of its generic parameters. In the low precision setting, RUDRA removes the PhantomData-filtering policy and reports Sync impls with no Sync bounds on any of its generic parameters.
+
+---
+
+# SafeDrop: Detecting Memory Deallocation Bugs of Rust Programs via Static Data-Flow Analysis
+## Type of Bugs
+1. Use After free
+2. Double Free
+3. Invalid Memory Access
+4. Dangling Pointer
+## Causes of Bugs
+1. Drop buffers in use: UAF, DF
+2. Drop invalid pointers: DF, IMA
+## Typical patterns
+1. getPtr() -> unsafeConstruct() -> drop() -> use()  => UAF
+2. getPtr() -> unsafeConstruct() -> drop() -> drop() => DF
+3. getPtr() -> drop() -> unsafeConstruct() -> use()  => UAF
+4. getPtr() -> drop() -> use() -> unsafeConstruct()  => DF
+5. uninitialized() -> use() => IMA
+6. uninitialized() -> drop() => IMA
+## Approach
+### Framework
+- Path Extraction: a novel method based on the Tarjan algorithm to merge redundant paths and generate a spanning tree, then traverse the spanning tree to find valuable paths.
+- Alias Analysis: flow-sensitive and field-sensitive alias analysis for each path to build alias set; context-insensitive inter-procedural analysis.
+- Invalid Drop Detection: Perform stain analysis on specific data and Conduct stain propagation on alias sets.
+### Rules for Bug Detection
+A buggy path generally involves a drop() statement or the special unsafe constructor uninitialized(), label  the alias sets of such objects as the tainted source.
+- Use After Free: A variable being used in a statement is tainted. e.g. b = a + 1 (a is tainted source).
+- Double Free: A variable being deallocated by drop() is tainted. e.g. ptr = stack.top(); stack.pop()(ptr is tainted here); Drop()
+- Invalid Memory Access: A variable being used or deallocated is tainted as uninitialized.
+- Dangling Pointer: A variable being returned by one function is tainted. Although this is unsafe only if we use the variable later, this rule is useful to detect deallocation bugs. e.g. ptr = stack.top(); stack.pop(); (ptr is dangling after pop())
+## Alias Sets Example
+```
+enum E {A, B {ptr: *mut u8}}
+struct S {b: E}
+
+fn foo(_1: &mut String) -> S:
+    _3 = str::as_mut_ptr(_1);    // alias set: {_3, _1}
+    ((_2 as B).0: *mut u8)= move _3;    // alias set: {_2.0, _3, _1}
+    discriminant(_2) = 1;    // instantiate the enum type to variant B
+    (_0.0: E) = move _2;    // alias sets: {_0.0, _2}, {_0.0.0, _2.0, _3, _1}
+    return;
+
+fn main():
+    _1 = String::from("string");    // alias sets: {_1}
+    _2 = &mut _1;    // alias set: {_2, _1}
+    _3 = foo(move _2);    // alias set: {_3.0.0, _2, _1}
+    ...
+```
