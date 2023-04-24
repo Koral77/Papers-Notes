@@ -5,6 +5,7 @@
 - [RULF: Rust Library Fuzzing via API Dependency Graph Traversal](#rulf-rust-library-fuzzing-via-api-dependency-graph-traversal)
 - [Search-Based Test Suite Generation for Rust](#search-based-test-suite-generation-for-rust)
 - [RUSTY: A Fuzzing Tool for Rust](#rusty-a-fuzzing-tool-for-rust)
+- [What is property-based testing?](#what-is-property-based-testing)
 ### Static Analysis
 - [Understanding Memory and Thread Safety Practices and Issues in Real-World Rust Programs](#understanding-memory-and-thread-safety-practices-and-issues-in-real-world-rust-programs)
 - [Detecting Unsafe Raw Pointer Dereferencing Behavior in Rust](#detecting-unsafe-raw-pointer-dereferencing-behavior-in-rust)
@@ -141,6 +142,41 @@ $$\alpha(x)=\frac x{x+1}$$
 3   }
 ```
 2. Otherwise, all generic type parameters of the corresponding statement are selected randomly.
+
+---
+
+## What is property-based testing?
+Property-Based testing consists of two parts.
+### Property-based test target
+Properties refer to certain laws or characteristics that the output should satisfy. For example: 
+```
+ import (
+	"strings"
+	"testing"
+	"testing/quick"
+)
+
+func TestCommonPrefix(t *testing.T) {
+	propertyTest := func(s1, s2 string) bool {
+		prefix := CommonPrefix(s1, s2)
+		if !strings.HasPrefix(s1, prefix) || !strings.HasPrefix(s2, prefix) {
+			return false
+		}
+		if len(prefix) == len(s1) || len(prefix) == len(s2) {
+			return true
+		}
+		return s1[len(prefix)] != s2[len(prefix)]
+	}
+	if err := quick.Check(propertyTest, nil); err != nil {
+		t.Error(err)
+	}
+}
+```
+In the example above, we check two properties of the output:
+- The two input strings (s1 and s2) should start with the prefix.
+- The prefix is the longest common prefix.
+### Input Generators
+A generator is a function that returns an instance of a given type from a source of randomness. In the previous section, we wrote a parameterized test that had two strings as arguments. The property-based testing framework automatically detected that the function expected a string. Using one of its default input generator, generated random strings automatically.
 
 ---
 
