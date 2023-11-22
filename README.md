@@ -753,9 +753,3 @@ In this section, we introduce how our abstract domain is designed to capture bot
 Verify through SMT solving.
 - **Runtime Panics :** gets all the conditions from the Assert(𝑐𝑜𝑛𝑑) terminators and it translates the integer bounds from the numerical abstract domain and the symbolic values from the symbolic abstract domain into SMT formulas.
 - **Lifetime Corruptions :** MirChecker internally maintains a list of unsafe functions. During the symbolic analysis, the transfer functions gather the ownership transitions made by these unsafe functions and verifies whether the original owner is used after the ownership has been transferred.
-
-------
-| 左对齐 | 右对齐 | 居中对齐 |
-| :-----| ----: | :----: |
-| 单元格 | 单元格 | 单元格 |
-| 单元格 | 单元格 | 单元格 |
